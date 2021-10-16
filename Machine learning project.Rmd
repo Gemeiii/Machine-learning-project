@@ -1,0 +1,241 @@
+---
+title: "Maching learning project"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+
+# Quality of Wine
+
+Wine an alcoholic beverage has been around for a very long time and has a very large market. In order to stay in the market wine producers need to be able to produce wine of certain quality in order to stay competitive. We can measure the quality of wine by analyzing the physiochemical properties of wine. In this project we used a dataset that had samples of white wine from a Portuguese wine called "Vinho Verde". There were 11 chemicals and a quality variable that was created based on sensory data, which was not explained due to logistical reasons.
+
+We wished to see which chemicals were important in predicting the quality of wine using multiple methods that we have covered this semester. These methods include knn, tree, logistic regression(ordinal),lasso, and linear regression.
+
+## Variables 
+
+There were 12 variables in the data set:
+ 
+  * **Fixed Acidity**:This is majority of the acid in the wine(considered fixed)
+  
+  * **Volatile Acidity**:The amount of acetic acid found in the wine(high amounts leads to a                          vinegar taste
+  
+  * **Citric Acid**:An organic acid thats adds flavor to the wine.
+ 
+  * **Residual Sugar**:The amount of sugar left after fermentation, the amount determines                           type of wine(Dry/Sweet)
+ 
+  * **Chlorides**:The amount of salt in the wine
+  
+  * **Free Sulfur Dioxide**:The amount of SO2 found in the wine(Gas), helps prevent oxidation
+  
+  * **Total Sulfur Dioxide**:The total amount both gas and bound forms of SO2, high levels                                leads to undesirables tastes in the wine.
+  
+  * **Denisty**:Density of the wine( practically as dense as water)
+  
+  * **Ph**:Describes how acidic or basic wine is (Most fall between 3 and 4)
+  
+  * **Sulfates**:An additive that affects the levels of SO2 in wine
+  
+  * **Alcohol**: Percent of Alcohol in wine(THE BEST PART)
+  
+  * **Quality**:Quality of wine ranges from 3 to 9 in this dataset
+  
+  * **Y**: Created based on the quality variable(Low=0,Average=1,and High=2)
+
+## Analysis
+
+```{r, include=FALSE}
+library(readr)
+library(rms)
+library(MASS)
+library(class)
+library(tree)
+library(glmnet)
+wine.white <- read_delim("winequality-white.csv",";", escape_double = FALSE, trim_ws = TRUE)
+wine.white<-data.frame(wine.white)
+wine.white <- wine.white[,-8]
+
+```
+
+```{r}
+wine.white$y <- ifelse(wine.white$quality==3 | wine.white$quality==4| wine.white$quality==5 ,0,ifelse(wine.white$quality==6,1,2))
+set.seed(001)
+train <- sample(length(wine.white$fixed.acidity),4000)
+white.test <- wine.white[-train,]
+white.train <- wine.white[train,]
+table(wine.white$y)
+```
+
+We created a variable 'Y' that we wanted to classify with 3 levels. Due to preliminary analysis and our understanding of the variable density, we decided to drop it from the data set as we believe that it would not add much information as all the values are close to 1. We also created a training and test sets for validation. Since our data set it relatively large all our modeling will be based on the training set. 
+## Descriptive Data
+
+```{r, echo=FALSE}
+par(mfrow=c(3,3))
+boxplot(fixed.acidity~y,data=wine.white,main='fixed acidity vs quality')
+boxplot(volatile.acidity~y,data=wine.white,main='volatile acidity vs quality')
+boxplot(residual.sugar~y,data=wine.white,main='residual sugar vs quality')
+boxplot(chlorides~y,data=wine.white,main='cholorides vs quality')
+boxplot(free.sulfur.dioxide~y,data=wine.white,main='free sulfur dioxide vs quality')
+boxplot(total.sulfur.dioxide~y,data=wine.white,main='total sulfur dioxide vs quality')
+boxplot(pH~y,data=wine.white,main='pH vs quality')
+boxplot(sulphates~y,data=wine.white,main='sulphates vs quality')
+boxplot(alcohol~y,data=wine.white,main='alcohol vs quality')
+```
+
+From the boxplots above, there are no obvious differences bewteen the different catergories, the means are relatively close knowing that the count for average quality wine is signifcantly higher than the other 2 levels of quality. Interestingly enough the mean for alcohol is higher in the high quality when compared to the other 2.
+
+## KNN
+
+```{r}
+attach(wine.white)
+white.ytrain<-y[train]
+white.ytest<-y[-train]
+knn.result=knn(white.train,white.test,white.ytrain,k=3)
+table(white.ytest,knn.result)
+mean(white.ytest==knn.result)
+```
+
+We classfied correctly about 65% of the time when k=3. Which is not a terrible classification rate given that our sample is based on 4000 observations. We will now check to see if there is better k.
+
+```{r}
+class.rate = rep(0,20)
+for (K in 1:20) {
+   knn.result = knn( white.train,white.test,white.ytrain, K )
+   class.rate[K]=mean(white.ytest == knn.result )
+   }
+class.rate
+which.max(class.rate)
+```
+
+So we find that our best k  when k=1 but we wouldn't want to use k=1 since it is too flexible since it would classify at each point. Since k=3 is a better classification rate then k=2 our best k is when k=3.
+
+## Tree
+
+```{r}
+white.tree<-tree(as.factor(y)~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol,data=white.train)
+plot(white.tree,type="uniform")
+text(white.tree)
+summary(white.tree)
+```
+
+So we did a classification tree and ended up with a very simple tree with 4 terminal nodes. Earlier we stated that the data set does not clarify how the quality variable which is based off sensory data was catergozied. We just know that it ranged from 3 to 9 going from low to high, respectively. With all the chemicals the percentage of alcohol is the most important variable by the tree method. Essentially we anything greater than 12.083 was considered high quality. If the alcohol percentage was less than 10.85 then the amount of volatile acidity was then considered. From our study we can see that if you had more than 0.2375 then the quality of wine was classified as low. High amounts of volatile acidity can cause wine to have a vinegar taste which makes this tree very sensible. Now we will check the classification rate for the tree.
+
+
+
+```{r}
+y.predict=predict(white.tree,wine.white,type="class")
+table(y.predict[-train],y[-train])
+mean(y.predict[-train]==y[-train])
+```
+
+Our classification rate using the tree method is .54 which is less than KNN when k=3. We can see from the table that it missclassfied high quality wine as average more than it did for KNN which can be due to the simplicity of our tree.
+
+```{r}
+cv<-cv.tree(white.tree)
+names(cv)
+cv$size #number of terminal nodes
+cv$dev #deviance: #4 is the smallest
+plot(cv)
+```
+
+```{r}
+cv2=cv.tree(white.tree,FUN=prune.misclass) 
+cv2$size #number of terminal nodes
+cv2$dev #now this is the number of mis classified units
+plot(cv2)
+white.tree.pruned=prune.misclass(white.tree,best=4) 
+summary(white.tree.pruned)
+```
+Since the optimal was 4 which matches our previous result we can still see that tree classified less than KNN.
+
+
+## Logistic Regression(Ordinal)
+
+```{r}
+ww.lr.full <- lrm(y~fixed.acidity+volatile.acidity+citric.acid+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol,data=white.train)
+ww.lr.full
+```
+
+From initial summary we can see that fixed acidity,citric acid, and chlorides are insignificant. We proceeded to use fastbw which stands for fast backward variable selection, which is also found in the "rms" package. This method computes fitted values from a complete model and computes approximate Wald statistics by computing conditional mles assuming multivariate normaility of estimates.
+
+
+```{r}
+fastbw(ww.lr.full)
+ww.lr1 <- lrm(y~fixed.acidity+volatile.acidity+residual.sugar+free.sulfur.dioxide+total.sulfur.dioxide+pH+sulphates+alcohol,data=white.train,x=T,y=T)
+```
+
+Surprisingly, fixed acidity ended up staying in the final model. Then we checked for significance.
+
+```{r}
+DevChi<-ww.lr1$deviance[1] - ww.lr1$deviance[2] 
+c("DevChiSq"=DevChi, "p-value"=1-pchisq(DevChi, 10))
+```
+
+Because the p-value is 0.000, our model is siginificant. Below are the 2 models from this regression.
+
+Model 1:log(Y>=1)/log(Y<1)= -10.55-0.076(fixedacidity)-5.42(volatile acidity)+0.068(residual sugar)-2.9911(chlorides)+0.015(free sulfur dioxide)-0.0036(total sulfur dioxide)+0.61(pH)+1.14(sulphates)+1(alcohol).
+
+Model 2: log(Y>=2)/log(Y<2)= -13.12-0.076(fixedacidity)-5.42(volatile acidity)+0.068(residual sugar)-2.9911(chlorides)+0.015(free sulfur dioxide)-0.0036(total sulfur dioxide)+0.61(pH)+1.14(sulphates)+1(alcohol).
+
+
+```{r}
+pred <- predict(ww.lr1,white.test[,1:11],type='fitted.ind')
+class.predictions <- apply(pred,1,which.max)
+class.predictions[class.predictions ==1] <- 0
+class.predictions[class.predictions ==2] <- 1
+class.predictions[class.predictions ==3] <- 2
+table(class.predictions,white.test$y)
+mean(white.test$y==class.predictions)
+```
+
+Our classification rate using a proportional odds model is 56% which is slightly above the tree's classification rate of 55%.
+
+## Linear Regression and Lasso
+
+From this point we treat Y as a numerical variable. We will compare a linear regession to lasso.
+
+```{r}
+reg <- lm(y~.-quality,data=white.train)
+summary(reg)
+reg2 <- step(reg)
+reg3 <-lm(y~1,data=white.train)
+anova(reg3,reg2)
+summary(reg2)
+```
+
+Our final model using the step function and checking for overall significance included all the variables except for citric acid. 
+The final model is Y=-2.60-0.022(fixed acidity)-1.57(volatile acidity)+0.02(residual sugar)-0.93(chlorides)+0.004(free sulfur dioxide)-0.001(total sulfur dioxide)+0.17(ph)+.34(sulphates)+0.31(alcohol)
+
+```{r}
+par(mfrow=c(2,2))
+plot(reg2)
+vif(reg2)
+```
+
+From our plots we can see some interesting information. Our qq plot shows that our data is practically normal with a few data points at the tails that may cause for concern but for a large data set this may not be an issue. The residual vs fitted show 3 distinct groups of points that are all parallel showing that our model can distinguish between the 3 catergories. Doing a quick vif function we can see that we are not worried about multicollinearity between the variables. 
+```{r}
+yhat <- predict(reg2,white.test[,1:10])
+lin.mse<-mean((yhat-white.test$y)^2)
+lin.mse
+```
+Our MSE is 0.38 
+```{r}
+X <- model.matrix(y~.-quality,data=white.train)
+X2<- model.matrix(y~.-quality,data=white.test)
+lasso <- glmnet(X,white.train$y,alpha=1,lambda=seq(0,10,0.01))
+cv.lasso <- cv.glmnet(X,white.train$y,alpha=1,lambda=seq(0,10,0.01))
+plot(cv.lasso)
+yhat2 = predict( lasso, cv.lasso$lambda.min, newx= X2)
+lasso.mse<-mean((yhat2 - white.test$y)^2)
+lasso.mse
+c(lin.mse,lasso.mse)
+```
+After finding the mse using the lasso method we can see that lasso very narrowly out performed the linear regression since they both essentially round to either 0.39 either method is worth using but as Y is a catergorical method we would prefer to stick to classification methods.
+
+## Conclusion
+
+From our classification methods KNN classfied correctly 65% of the time while, ordinal logistic regression classfied properly 56% of the time with tree classifying at 55%. Our classification methods were relatively weak but there are some things we need to note about the method in which the variable "Y"" was created. Given what we know about the chemical properties that wine provides we cannot be conclusive about the quality of wine as the information surrounding the quality of wine is limited but also quite subjective. First, we must acknowledge that the quality variable in this dataset is not fleshed out in the sense that we do not  know exactly how the quality was quantified. Due to logistic issues the company that released this dataset did not explain how quality was catergorized. This would impact how we had chosen to split the quality variable. From the original distribution of the quality variable we can assume that most wine are of average quality. Most of the counts of the data can be found bewteen 5 and 7 leading us to believe that assumption. From the previous boxplots we can see that the mean for the predictors did not differ greatly between the levels that we assigned. The chemical properties only tell us a portion of the story they are some other factors that can be considered the dataset does not include. They type of grapes, price of wine, storage of the wine and other properties that aren't limited to the chemical properties can also affect the quality of wine. Yet, we must also think about as an average consumer most wine found in stores today can be considered of the average quality, as wine that would be of low quality may just have been a bad batch. While on the other hand, high quality wine may not always be accessible due to either price or availability of said wine.
+
+There are some things that we could have done differently that may change our prediction pow the of our model. For simplistic reasons we worked with only 3 levels for quality, but we could have increased the number of levels to show a larger spread. We could have checked for outliers in the x observations that may affect the classification of some samples but as we do not know exactly how quality was done we can't  know for sure if by industry standards if some values are truly outliers. This dataset let us learn a little about how a "subjective" attribute can be tested with science but that it only tells us a piece of the story.
+
